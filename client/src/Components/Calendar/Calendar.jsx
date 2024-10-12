@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'; //React Hook 사용
 import { BiSolidHeart } from "react-icons/bi";
 import { PiCakeDuotone } from "react-icons/pi";
 import { IoAirplane } from "react-icons/io5";
@@ -24,10 +24,19 @@ const Calendar = () => {
   const [selectedEvent, setSelectedEvent] = useState(null); // 선택된 이벤트
   const [iconIndexes, setIconIndexes] = useState({}); // 아이콘 인덱스
   const [showModal, setShowModal] = useState(false); // 모달
+  const [showMoreModal, setShowMoreModal] = useState(false);
+  const [moreEvents, setMoreEvents] = useState([]); // 더보기 이벤트 저장
+  const [sortByTime, setSortByTime] = useState(true); // 시간순 정렬 옵션
 
   const daysInWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; //요일 배열
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay(); // 해당 월의 첫 요일
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate(); // 해당 월의 일수
+
+  const dayColors = {
+    Sun: 'red', // 일요일
+    Sat: 'blue', // 토요일
+    default: 'black', // 평일
+  };
 
   const colorOptions = [
     '#7F24A6', '#4563BF', '#39BF73', '#F2AC29',
@@ -65,6 +74,13 @@ const Calendar = () => {
     setShowModal(false);
     setSelectedEvent(null);
   };
+
+  /*const openMoreModal = (eventsForDay) => {
+    setMoreEvents(eventsForDay);
+    setShowMoreModal(true);
+  };*/
+  const closeMoreModal = () => setShowMoreModal(false);
+
 //날짜를 클릭했을 때 이벤트
   const handleDateClick = (day) => {
     const dateKey = `${currentYear}-${currentMonth + 1}-${day}`;
@@ -126,6 +142,19 @@ const Calendar = () => {
     openModal();
   };
 
+  const handleMoreClick = (day) => {
+    const dateKey = `${currentYear}-${currentMonth + 1}-${day}`;
+    const eventsForDay = events[dateKey] || [];
+    
+    if (eventsForDay.length > 0) {
+      setMoreEvents(eventsForDay);  // 이벤트가 있을 경우만 모달을 엽니다.
+      setShowMoreModal(true);       // 모달 열기
+    } else {
+      console.error('No events for this day.');
+    }
+  };
+  
+
   const handleEventUpdate = () => {
     if (selectedDate && selectedEvent) {
       const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth() + 1}-${selectedDate.getDate()}`;
@@ -167,8 +196,22 @@ const Calendar = () => {
     }));
   };
 
+  const handleEventEditFromMoreModal = (event) => {
+  setSelectedEvent(event); // 선택된 이벤트 설정
+  setEventTitle(event.title);
+  setEventTime(event.time);
+  setEventContent(event.content);
+  closeMoreModal(); // 더보기 모달 닫기
+  openModal(); // 원래 모달 열기
+};
+
+  const filteredAndSortedEvents = moreEvents
+    .sort((a, b) => sortByTime ? a.time.localeCompare(b.time) : 0);
+
   const weeks = Math.ceil((firstDayOfMonth + daysInMonth) / 7);
-  const daySize = weeks === 6 ? 80 : 100; // 6주일 때 칸 크기 조정
+  const isSixWeeks = weeks === 6; // 6주인지 확인
+
+  const gridGap = isSixWeeks ? '2px' : '13px'; // 6주일 때 간격 조정
 
   const days = [];
   for (let i = 0; i < firstDayOfMonth; i++) {
@@ -178,23 +221,29 @@ const Calendar = () => {
   for (let day = 1; day <= daysInMonth; day++) {
     const dateKey = `${currentYear}-${currentMonth + 1}-${day}`;
     const hasEvents = !!events[dateKey];
+    const dayOfWeek = new Date(currentYear, currentMonth, day).getDay();
+    const color = (dayOfWeek === 0) ? dayColors.Sun : (dayOfWeek === 6) ? dayColors.Sat : dayColors.default;
     const currentIconIndex = iconIndexes[dateKey];
+    const maxVisibleEvents = 2; // 최대 보이는 이벤트 수
 
-    days.push(
-      <div
-        key={day}
-        className={`${styles.calendarDay} ${selectedDate?.getDate() === day ? styles.selected : ''}`}
-        onClick={() => handleDateClick(day)}
-        style={{ height: `${daySize}px` }}
-      >
+days.push(
+  <div
+    key={day}
+    className={`${styles.calendarDay} ${selectedDate?.getDate() === day ? styles.selected : ''}`}
+    onClick={() => handleDateClick(day)}
+    style={{ minHeight: isSixWeeks ? '110px' : '130px', color: color }} // 6주일 때 min-height 조정
+>
         {day}
         {hasEvents && (
           <>
             <div className={styles.iconContainer} onClick={(e) => handleIconClick(e, day)}>
               {icons[currentIconIndex]}
             </div>
-            {events[dateKey].map((event, index) => (
-              <div
+            {events[dateKey]
+           .sort((a, b) => a.time.localeCompare(b.time)) // 시간을 기준으로 정렬
+           .slice(0, events[dateKey].length > maxVisibleEvents ? 1 : maxVisibleEvents) // 3개 이상일 때 1개, 2개 이하일 때는 2개 보이기
+           .map((event, index) => (
+             <div
                 key={index}
                 className={styles.eventTitle}
                 onClick={(e) => {
@@ -203,15 +252,32 @@ const Calendar = () => {
                 }}
                 style={{
                   backgroundColor: event.color,
-                  color: 'white', 
-                  padding: '2px 4px',
+                  color: 'white',
+                  padding: '5px 20px',
                   borderRadius: '4px',
-                  marginTop: '4px',
+                  marginTop: '40px',
+                  marginRight: '3px', // 간격 조정
+                  fontSize: '0.9rem',
+                  lineHeight: '1.2',
+                  position: 'absolute', // 부모의 영향을 덜 받도록 설정
+                  top: `${index * 30}px`, // 이벤트의 세로 간격 조정
                 }}
               >
                 {event.title}
-              </div>
+                </div>
             ))}
+            {events[dateKey].length > maxVisibleEvents && (
+              <div
+                className={styles.moreEvents}
+                style={{ marginTop: '65px' }} 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMoreClick(day);
+                }}
+              >
+                ...더보기
+              </div>
+            )}
           </>
         )}
       </div>
@@ -224,15 +290,14 @@ const Calendar = () => {
       <div className={styles.calendarContainer}>
         <div className={styles.calendarHeader}>
           <button onClick={handlePrevMonth}>&lt;</button>
-          <button onClick={handleNextMonth}>&gt;</button>
           <div>{`${currentYear}년 ${currentMonth + 1}월`}</div>
-          <div className={styles.selectedDate}>
-            {selectedDate ? `선택: ${selectedDate.toLocaleDateString()}` : '날짜 선택 안됨'}
-          </div>
+          <button onClick={handleNextMonth}>&gt;</button>
         </div>
         <div className={styles.calendarGrid}>
           {daysInWeek.map((dayName, index) => (
-            <div key={index} className={styles.calendarDayName}>
+            <div key={index} 
+            className={styles.calendarDayName}
+            style={{ color: dayColors[dayName] || dayColors.default }} >
               {dayName}
             </div>
           ))}
@@ -268,6 +333,17 @@ const Calendar = () => {
             <button onClick={handleEventDelete}>삭제</button>
           </>
         )}
+      </Modal>
+      <Modal isOpen={showMoreModal} onRequestClose={closeMoreModal} className={styles.modal}>
+        <h2>모든 일정 보기</h2>
+        {filteredAndSortedEvents.map((event, index) => (
+          <div key={index} className={styles.eventDetail}>
+            <strong>{event.title}</strong> - {event.time}
+            <p>{event.content}</p>
+            <button onClick={() => handleEventEditFromMoreModal(event)}>수정</button>
+          </div>
+        ))}
+        <button onClick={closeMoreModal}>닫기</button>
       </Modal>
     </div>
   );
